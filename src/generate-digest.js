@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { buildDigestHtml, sendDigestEmail } from './email.js';
 
 const RAINDROP_TOKEN = process.env.RAINDROP_TOKEN;
 const RAINDROP_COLLECTION_ID = process.env.RAINDROP_COLLECTION_ID;
@@ -118,6 +119,12 @@ async function main() {
   writeFileSync(filename, markdown);
 
   console.log(`Wrote ${items.length} link(s) to ${filename}`);
+
+  const dateRange = formatDateRange(startDate, endDate);
+  await sendDigestEmail({
+    subject: `Weekly Links: ${dateRange}`,
+    html: buildDigestHtml(items, dateRange),
+  });
 }
 
 main().catch((err) => {

@@ -8,7 +8,8 @@ Inspired by [Automated Weekly Links Posts with Raindrop.io and Eleventy](https:/
 
 1. A script queries the Raindrop.io API for everything saved to a specific collection in the last N days (default 7).
 2. It renders the results as a Markdown file with YAML front matter (`digests/YYYY-MM-DD-weekly-links.md`).
-3. A GitHub Actions workflow runs the script every Monday, commits the new file if there's anything to add, and can also be triggered manually.
+3. If SMTP settings are configured, it also emails the same digest as HTML.
+4. A GitHub Actions workflow runs the script every Monday, commits the new file if there's anything to add, and can also be triggered manually.
 
 ## Setup
 
@@ -37,22 +38,44 @@ npm run digest
 
 This writes a file to `digests/`, e.g. `digests/2026-09-16-weekly-links.md`. If nothing was saved in the window, no file is written.
 
-### 4. Automate with GitHub Actions
+### 4. (Optional) Email the digest
+
+To also send the digest by email, set these in `.env`:
+
+| Variable | Description |
+| --- | --- |
+| `SMTP_HOST` | e.g. `smtp.gmail.com` |
+| `SMTP_PORT` | `587` (STARTTLS) or `465` (SSL) |
+| `SMTP_USERNAME` | Your full email address |
+| `SMTP_PASSWORD` | An **app password**, not your normal login password |
+| `EMAIL_FROM` | Sending address — for Gmail this should match `SMTP_USERNAME` |
+| `EMAIL_TO` | Where to send the digest |
+
+For Gmail or Google Workspace:
+
+1. Turn on 2-Step Verification on the sending account, if it isn't already.
+2. Generate an app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+3. Use that 16-character password as `SMTP_PASSWORD`.
+
+If any of these six variables are missing, the script just skips emailing (no error) — so it's safe to leave unset until you're ready.
+
+### 5. Automate with GitHub Actions
 
 1. Push this project to a new GitHub repo.
-2. In the repo, go to **Settings → Secrets and variables → Actions** and add two repository secrets:
-   - `RAINDROP_TOKEN`
-   - `RAINDROP_COLLECTION_ID`
-3. Done — [`.github/workflows/weekly-digest.yml`](.github/workflows/weekly-digest.yml) runs every Monday at 08:00 UTC, generates the digest, and commits it if there's new content. Trigger it manually anytime from the **Actions** tab via "Run workflow".
+2. In the repo, go to **Settings → Secrets and variables → Actions** and add repository secrets for whichever variables you're using:
+   - `RAINDROP_TOKEN`, `RAINDROP_COLLECTION_ID` (required)
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO` (optional, for email)
+3. Done — [`.github/workflows/weekly-digest.yml`](.github/workflows/weekly-digest.yml) runs every Monday at 08:00 UTC, generates the digest, emails it if configured, and commits it to `digests/` if there's new content. Trigger it manually anytime from the **Actions** tab via "Run workflow".
 
 ## Configuration
 
-Optional environment variables (set in `.env` locally, or as repo secrets/vars for Actions):
+Optional environment variables (set in `.env` locally, or as repo secrets for Actions):
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `DIGEST_DAYS` | `7` | How many days back to look for links |
 | `DIGEST_OUTPUT_DIR` | `digests` | Where generated files are written |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` / `EMAIL_TO` | _(unset)_ | Email delivery — see above. All six must be set for email to send. |
 
 ## Using the output in your static site
 
@@ -64,4 +87,5 @@ Each generated file has YAML front matter (`title`, `date`, `tags`) and a Markdo
 
 ## Customizing the digest format
 
-Edit `formatRaindrop` and `buildMarkdown` in [`src/generate-digest.js`](src/generate-digest.js) to change how each link and the overall post are rendered.
+- Edit `formatRaindrop` and `buildMarkdown` in [`src/generate-digest.js`](src/generate-digest.js) to change the Markdown file.
+- Edit `buildDigestHtml` in [`src/email.js`](src/email.js) to change the emailed version.
