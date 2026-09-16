@@ -1,0 +1,16 @@
+{
+  "name": "raindrop-weekly-digest",
+  "version": "1.0.0",
+  "description": "Generates a weekly Markdown digest of links saved to a Raindrop.io collection.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "digest": "node src/generate-digest.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

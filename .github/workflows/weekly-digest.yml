@@ -1,0 +1,37 @@
+name: Weekly Links Digest
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Mondays at 08:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  generate-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate digest
+        env:
+          RAINDROP_TOKEN: ${{ secrets.RAINDROP_TOKEN }}
+          RAINDROP_COLLECTION_ID: ${{ secrets.RAINDROP_COLLECTION_ID }}
+        run: npm run digest
+
+      - name: Commit digest
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Add weekly links digest'
+          file_pattern: 'digests/*.md'
