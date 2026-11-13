@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildDigestHtml, sendDigestEmail } from './email.js';
+import { publishToWordPress } from './wordpress.js';
 
 const RAINDROP_TOKEN = process.env.RAINDROP_TOKEN;
 const RAINDROP_COLLECTION_ID = process.env.RAINDROP_COLLECTION_ID;
@@ -97,10 +98,33 @@ ${links}
 `;
 }
 
+// DIGEST_END_DATE (YYYY-MM-DD) re-runs a past week, e.g. to backfill a missed blog post.
+function resolveEndDate() {
+  const override = process.env.DIGEST_END_DATE?.trim();
+  if (!override) return new Date();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(override)) {
+    console.error(`DIGEST_END_DATE must look like 2026-11-09, got "${override}"`);
+    process.exit(1);
+  }
+  return new Date(`${override}T12:00:00Z`);
+}
+
+// Runs one delivery step; a failure is logged and marks the run as failed
+// without stopping the other steps.
+async function runStep(name, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`${name} failed:`, err.message ?? err);
+    process.exitCode = 1;
+  }
+}
+
 async function main() {
   requireEnv();
 
-  const endDate = new Date();
+  const wordpressOnly = process.env.WORDPRESS_ONLY === 'true';
+  const endDate = resolveEndDate();
   const startDate = new Date(endDate.getTime() - DIGEST_DAYS * 24 * 60 * 60 * 1000);
 
   console.log(
@@ -113,18 +137,26 @@ async function main() {
     return;
   }
 
-  const markdown = buildMarkdown(items, startDate, endDate);
-  mkdirSync(OUTPUT_DIR, { recursive: true });
-  const filename = path.join(OUTPUT_DIR, `${toISODate(endDate)}-weekly-links.md`);
-  writeFileSync(filename, markdown);
+  if (wordpressOnly) {
+    console.log('WORDPRESS_ONLY is set — skipping the digest file and email.');
+  } else {
+    const markdown = buildMarkdown(items, startDate, endDate);
+    mkdirSync(OUTPUT_DIR, { recursive: true });
+    const filename = path.join(OUTPUT_DIR, `${toISODate(endDate)}-weekly-links.md`);
+    writeFileSync(filename, markdown);
 
-  console.log(`Wrote ${items.length} link(s) to ${filename}`);
+    console.log(`Wrote ${items.length} link(s) to ${filename}`);
 
-  const dateRange = formatDateRange(startDate, endDate);
-  await sendDigestEmail({
-    subject: `Weekly Links: ${dateRange}`,
-    html: buildDigestHtml(items, dateRange),
-  });
+    const dateRange = formatDateRange(startDate, endDate);
+    await runStep('Email', () =>
+      sendDigestEmail({
+        subject: `Weekly Links: ${dateRange}`,
+        html: buildDigestHtml(items, dateRange),
+      })
+    );
+  }
+
+  await runStep('WordPress', () => publishToWordPress(items, startDate, endDate));
 }
 
 main().catch((err) => {

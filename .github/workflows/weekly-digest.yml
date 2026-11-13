@@ -3,7 +3,16 @@ name: Weekly Links Digest
 on:
   schedule:
     - cron: '0 8 * * 1' # Mondays at 08:00 UTC
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      end_date:
+        description: 'Optional: last day of a past week to re-run (YYYY-MM-DD). Leave blank for the last 7 days.'
+        required: false
+        default: ''
+      wordpress_only:
+        description: 'Only publish to WordPress (no digest file, no email). Use for tests and backfills.'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -34,9 +43,18 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASS: ${{ secrets.WP_APP_PASS }}
+          SAVED_LINKS_CATEGORY_ID: ${{ vars.SAVED_LINKS_CATEGORY_ID }}
+          DIGEST_END_DATE: ${{ inputs.end_date }}
+          WORDPRESS_ONLY: ${{ inputs.wordpress_only }}
         run: npm run digest
 
+      # Runs even if the email or WordPress step failed, so the digest is still
+      # saved and the repo keeps the weekly activity that stops GitHub disabling the schedule.
       - name: Commit digest
+        if: ${{ !cancelled() }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'Add weekly links digest'
