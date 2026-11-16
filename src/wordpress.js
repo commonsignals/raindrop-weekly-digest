@@ -102,12 +102,17 @@ export function buildPost(items, startDate, endDate, { category = null, tagLinks
   return { title, slug, content: blocks.join('\n\n') };
 }
 
-function statusHint(status) {
+function statusHint(status, code) {
   if (status === 401) {
     return '\nHint: WordPress rejected the login. Check the WP_USER and WP_APP_PASS secrets (WP_APP_PASS is the WordPress login password when using the miniOrange plugin) and that the miniOrange REST API Authentication plugin is still active.';
   }
   if (status === 403) {
     return '\nHint: the request was refused before or by WordPress. Check the miniOrange plugin settings, any security plugin or host firewall rules, and the .htaccess rules for wp-json.';
+  }
+  // A 404 with a WordPress error code other than rest_no_route means the route
+  // exists but the item doesn't (e.g. rest_term_invalid for a bad category ID).
+  if (status === 404 && code && code !== 'rest_no_route') {
+    return `\nHint: WordPress answered but the item doesn't exist (${code}). If this is a category lookup, check SAVED_LINKS_CATEGORY_ID is a category ID (Posts → Categories), not a tag ID.`;
   }
   if (status === 404) {
     return '\nHint: the REST API route was not found. Check WP_URL and that the REST API is enabled.';
@@ -152,7 +157,7 @@ async function wpRequest(cfg, method, route, body) {
 
   if (!response.ok) {
     const error = new Error(
-      `WordPress ${method} ${route} failed (${response.status} ${response.statusText}): ${text.slice(0, 500)}${statusHint(response.status)}`
+      `WordPress ${method} ${route} failed (${response.status} ${response.statusText}): ${text.slice(0, 500)}${statusHint(response.status, data?.code)}`
     );
     error.status = response.status;
     error.data = data;
@@ -170,9 +175,9 @@ async function getCategory(cfg) {
   if (!cfg.categoryId) return null;
   try {
     const cat = await wpRequest(cfg, 'GET', `/categories/${cfg.categoryId}?_fields=id,name,link`);
-    return { name: decodeEntities(cat.name), link: cat.link };
+    return { id: cat.id, name: decodeEntities(cat.name), link: cat.link };
   } catch (err) {
-    console.warn(`Warning: could not look up category ${cfg.categoryId}; posting without the category link. ${err.message}`);
+    console.warn(`Warning: could not look up category ${cfg.categoryId}; posting without a category. ${err.message}`);
     return null;
   }
 }
@@ -246,7 +251,8 @@ export async function publishToWordPress(items, startDate, endDate) {
     status: cfg.status,
     tags: tags.ids,
   };
-  if (cfg.categoryId) payload.categories = [cfg.categoryId];
+  // Only assign the category if the lookup confirmed it exists.
+  if (category) payload.categories = [category.id];
 
   const created = await wpRequest(cfg, 'POST', '/posts', payload);
   console.log(`Published to WordPress (${created.status}): ${created.link}`);
